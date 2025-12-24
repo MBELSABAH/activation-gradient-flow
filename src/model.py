@@ -1,5 +1,5 @@
 import numpy as np
-from activations import sigmoid, sigmoid_derivative
+from activations import sigmoid, sigmoid_derivative, relu, relu_derivative
 
 class MLP:
     def __init__(self, layer_sizes, seed=42):
@@ -17,9 +17,13 @@ class MLP:
         self.Z = []
         self.A = [X]
 
-        for W, b in zip(self.W, self.b):
+        for i, (W, b) in enumerate(zip(self.W, self.b)):
             z = self.A[-1] @ W + b
-            a = sigmoid(z)
+
+            if i == len(self.W) - 1:
+                a = sigmoid(z)      # output layer
+            else:
+                a = relu(z)         # hidden layers
 
             self.Z.append(z)
             self.A.append(a)
@@ -31,6 +35,7 @@ class MLP:
         dW = []
         db = []
 
+        # Output layer gradient (sigmoid + BCE simplification)
         dz = self.A[-1] - y
 
         for i in reversed(range(len(self.W))):
@@ -41,7 +46,7 @@ class MLP:
             db.insert(0, db_)
 
             if i > 0:
-                dz = (dz @ self.W[i].T) * sigmoid_derivative(self.Z[i-1])
+                dz = (dz @ self.W[i].T) * relu_derivative(self.Z[i-1])
 
         return dW, db
 
