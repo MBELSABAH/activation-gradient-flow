@@ -58,3 +58,9 @@ class MLP:
         for i in range(len(self.W)):
             self.W[i] -= lr * dW[i]
             self.b[i] -= lr * db[i]
+
+    def hidden_activations(self):
+        """
+        Returns activations of hidden layers only.
+        """
+        return self.A[1:-1]
