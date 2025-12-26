@@ -8,8 +8,9 @@ from losses import binary_cross_entropy
 from metrics import (
     gradient_norms,
     relu_dead_rate,
-    sigmoid_saturation_rate,
-    tanh_saturation_rate
+    tanh_saturation_rate,
+    arctan_saturation_rate,
+    softsign_saturation_rate
 )
 
 # ---------- paths ----------
@@ -18,6 +19,7 @@ RESULTS_DIR = os.path.join(ROOT_DIR, "results")
 os.makedirs(RESULTS_DIR, exist_ok=True)
 
 # ---------- experiment config ----------
+RUN_TAG = "xavier"  # prevents overwriting old CSVs
 activations = ["relu", "tanh", "arctan", "softsign"]
 epochs = 2000
 lr = 0.05
@@ -35,7 +37,7 @@ for activation in activations:
     )
 
     output_file = os.path.join(
-        RESULTS_DIR, f"runs_{activation}.csv"
+        RESULTS_DIR, f"runs_{RUN_TAG}_{activation}.csv"
     )
 
     with open(output_file, "w", newline="") as f:
@@ -45,7 +47,7 @@ for activation in activations:
             "loss",
             "accuracy",
             "grad_norms",
-            "dead_or_saturation_rate"
+            "activation_limit_rate"
         ])
 
         for epoch in range(epochs):
@@ -61,18 +63,20 @@ for activation in activations:
             hidden_A = model.hidden_activations()
 
             if activation == "relu":
-                dead_rate = relu_dead_rate(hidden_A)
+                rate = relu_dead_rate(hidden_A)
             elif activation == "tanh":
-                dead_rate = tanh_saturation_rate(hidden_A)
-            else:
-                dead_rate = sigmoid_saturation_rate(hidden_A)
+                rate = tanh_saturation_rate(hidden_A)
+            elif activation == "arctan":
+                rate = arctan_saturation_rate(hidden_A)
+            else:  # softsign
+                rate = softsign_saturation_rate(hidden_A)
 
             writer.writerow([
                 epoch,
                 float(loss),
                 float(acc),
                 grad_norm,
-                float(dead_rate)
+                float(rate)
             ])
 
             if epoch % 400 == 0:
@@ -80,7 +84,7 @@ for activation in activations:
                     f"Epoch {epoch:4d} | "
                     f"Loss {loss:.4f} | "
                     f"Acc {acc:.3f} | "
-                    f"Sat/Dead {dead_rate:.3f}"
+                    f"LimitRate {rate:.3f}"
                 )
 
     print(f"Saved results to {output_file}")

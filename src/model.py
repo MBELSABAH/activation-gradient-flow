@@ -12,10 +12,16 @@ class MLP:
             ACTIVATIONS[hidden_activation]
 
         for i in range(len(layer_sizes) - 1):
+            fan_in = layer_sizes[i]
+            fan_out = layer_sizes[i + 1]
+
+            # Xavier/Glorot normal initialization (good default across activations)
+            std = np.sqrt(2.0 / (fan_in + fan_out))
             self.W.append(
-                rng.normal(0, 0.1, size=(layer_sizes[i], layer_sizes[i+1]))
+                rng.normal(0.0, std, size=(fan_in, fan_out))
             )
-            self.b.append(np.zeros((1, layer_sizes[i+1])))
+
+            self.b.append(np.zeros((1, fan_out)))
 
     def forward(self, X):
         self.Z = []
