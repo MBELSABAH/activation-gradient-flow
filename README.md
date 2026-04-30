@@ -1,5 +1,11 @@
 # Activation Gradient Flow: XOR Activation Experiments
 
+## Report
+
+The full technical report is available here:
+
+[Activation Gradient Flow: XOR Activation Experiments](paper/activation-gradient-flow-xor-activation-study.pdf)
+
 This repository contains a from-scratch NumPy implementation of a shallow multilayer perceptron (MLP) used to study how activation functions interact with initialization scale, gradient flow, and training dynamics on a noisy XOR classification task.
 
 The project compares:
