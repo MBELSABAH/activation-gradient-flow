@@ -3,3 +3,4 @@ __pycache__/
 .DS_Store
 results/
 figures_drafts/
+archive_old_outputs/
