@@ -80,7 +80,9 @@ def main():
     plt.tight_layout()
 
     if args.save:
-        os.makedirs(os.path.dirname(args.save), exist_ok=True)
+        save_dir = os.path.dirname(args.save)
+        if save_dir:
+            os.makedirs(save_dir, exist_ok=True)
         plt.savefig(args.save, dpi=args.dpi)
     else:
         plt.show()
