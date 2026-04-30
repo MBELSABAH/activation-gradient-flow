@@ -1,62 +1,75 @@
 import numpy as np
 
-def gradient_norms(dW):
-    """
-    Compute L2 norm of gradients for each layer.
-    """
-    return [np.linalg.norm(dw) for dw in dW]
+
+def _stack(arrays):
+    if not arrays:
+        return np.array([], dtype=float)
+    return np.concatenate([a.reshape(-1) for a in arrays])
 
 
-def _flatten_hidden_activations(activations):
-    """
-    Stack hidden-layer activations into one array for rate computations.
-    activations is a list of arrays, one per hidden layer, each shape (n, units).
-    """
-    return np.concatenate(activations, axis=0)
+def activation_limit_rate(hidden_activation, z_flat, limit_thresh=0.95):
+    """Activation-specific limit/dead-rate proxy used as a qualitative diagnostic."""
+    if z_flat.size == 0:
+        return 0.0
+    if hidden_activation == "relu":
+        # ReLU output is exactly zero when z <= 0.
+        return float(np.mean(z_flat <= 0.0))
+    if hidden_activation == "tanh":
+        return float(np.mean(np.abs(np.tanh(z_flat)) > limit_thresh))
+    if hidden_activation == "arctan":
+        return float(np.mean(np.abs(np.arctan(z_flat)) > limit_thresh * (np.pi / 2.0)))
+    if hidden_activation == "softsign":
+        softsign = z_flat / (1.0 + np.abs(z_flat))
+        return float(np.mean(np.abs(softsign) > limit_thresh))
+    raise ValueError(f"Unknown activation '{hidden_activation}'")
 
 
-def relu_dead_rate(activations):
-    """
-    Fraction of activations that are exactly zero.
-    (For ReLU, exactly-zero activations are a reasonable "dead" proxy.)
-    """
-    a = _flatten_hidden_activations(activations)
-    return np.mean(a == 0)
+def activation_diagnostics(hidden_activation, hidden_z, deriv_eps=1e-3, z_linear_eps=0.1):
+    z_flat = _stack(hidden_z)
+    if z_flat.size == 0:
+        return {
+            "dphi_small_rate": 0.0,
+            "dphi_mean_abs": 0.0,
+            "dphi_p10_abs": 0.0,
+            "dphi_p01_abs": 0.0,
+            "dphi_log_mean": -27.631,
+            "z_mean_abs": 0.0,
+            "z_p90_abs": 0.0,
+            "z_near0_rate": 0.0,
+            "limit_rate": 0.0,
+        }
+
+    if hidden_activation == "relu":
+        dphi = (z_flat > 0).astype(float)
+    elif hidden_activation == "tanh":
+        dphi = 1.0 - np.tanh(z_flat) ** 2
+    elif hidden_activation == "arctan":
+        dphi = 1.0 / (1.0 + z_flat ** 2)
+    elif hidden_activation == "softsign":
+        dphi = 1.0 / (1.0 + np.abs(z_flat)) ** 2
+    else:
+        raise ValueError(f"Unknown activation '{hidden_activation}'")
+
+    dphi_abs = np.abs(dphi)
+    z_abs = np.abs(z_flat)
+
+    return {
+        "dphi_small_rate": float(np.mean(dphi_abs < deriv_eps)),
+        "dphi_mean_abs": float(np.mean(dphi_abs)),
+        "dphi_p10_abs": float(np.percentile(dphi_abs, 10)),
+        "dphi_p01_abs": float(np.percentile(dphi_abs, 1)),
+        "dphi_log_mean": float(np.mean(np.log(dphi_abs + 1e-12))),
+        "z_mean_abs": float(np.mean(z_abs)),
+        "z_p90_abs": float(np.percentile(z_abs, 90)),
+        "z_near0_rate": float(np.mean(z_abs <= z_linear_eps)),
+        "limit_rate": activation_limit_rate(hidden_activation, z_flat),
+    }
 
 
-def sigmoid_saturation_rate(activations, eps=0.05):
-    """
-    Fraction of activations near 0 or 1.
-    (Meaningful only for sigmoid-range activations.)
-    """
-    a = _flatten_hidden_activations(activations)
-    return np.mean((a < eps) | (a > 1 - eps))
-
-
-def tanh_saturation_rate(activations, eps=0.95):
-    """
-    Fraction of activations near -1 or 1.
-    """
-    a = _flatten_hidden_activations(activations)
-    return np.mean(np.abs(a) > eps)
-
-
-def arctan_saturation_rate(activations, eps=0.95):
-    """
-    Fraction of activations near the arctan bounds.
-    arctan(z) ranges in (-pi/2, pi/2).
-    We define "saturated" as close to either bound.
-    """
-    a = _flatten_hidden_activations(activations)
-    bound = np.pi / 2
-    thresh = eps * bound
-    return np.mean((a < -thresh) | (a > thresh))
-
-
-def softsign_saturation_rate(activations, eps=0.95):
-    """
-    Fraction of activations near the softsign bounds.
-    softsign(z) = z / (1 + |z|) ranges in (-1, 1).
-    """
-    a = _flatten_hidden_activations(activations)
-    return np.mean(np.abs(a) > eps)
+def gradient_stats(dW):
+    stats = {}
+    for idx, dw in enumerate(dW, start=1):
+        l2 = float(np.linalg.norm(dw))
+        stats[f"grad_norm_L{idx}"] = l2
+        stats[f"grad_rms_L{idx}"] = float(np.sqrt(np.mean(dw ** 2)))
+    return stats
