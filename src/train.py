@@ -13,6 +13,22 @@ from model import MLP
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RESULTS_DIR = os.path.join(ROOT_DIR, "results")
 
+FINAL_METRICS = [
+    "train_loss",
+    "test_loss",
+    "train_acc",
+    "test_acc",
+    "dphi_small_rate",
+    "dphi_mean_abs",
+    "dphi_p10_abs",
+    "dphi_p01_abs",
+    "dphi_log_mean",
+    "z_mean_abs",
+    "z_p90_abs",
+    "z_near0_rate",
+    "limit_rate",
+]
+
 
 def parse_csv_arg(value, cast=str):
     return [cast(x.strip()) for x in value.split(",") if x.strip()]
@@ -47,7 +63,6 @@ def run_seed(args, activation, init_mode, init_scale, seed):
         gstats = gradient_stats(dW)
         ad = activation_diagnostics(activation, model.hidden_preactivations(), args.deriv_eps, args.z_linear_eps)
 
-        model.step(dW, db, args.lr)
         yhat_test = model.forward(X_test)
         test_loss = float(binary_cross_entropy(y_test, yhat_test))
         test_acc = float(np.mean((yhat_test >= 0.5) == y_test))
@@ -62,6 +77,7 @@ def run_seed(args, activation, init_mode, init_scale, seed):
             **gstats,
         }
         rows.append(row)
+        model.step(dW, db, args.lr)
     return rows
 
 
@@ -88,6 +104,23 @@ def aggregate_rows(seed_runs):
             row[f"{k}_std"] = float(vals.std(ddof=0))
         out.append(row)
     return out
+
+
+def final_summary_row(activation, init_mode, scale, args, last):
+    row = {
+        "activation": activation,
+        "init": init_mode,
+        "init_scale": scale,
+        "n_seeds": len(args.seeds),
+        "epochs": args.epochs,
+        "lr": args.lr,
+        "noise": args.noise,
+        "test_size": args.test_size,
+    }
+    for metric in FINAL_METRICS:
+        row[f"{metric}_mean"] = last[f"{metric}_mean"]
+        row[f"{metric}_std"] = last[f"{metric}_std"]
+    return row
 
 
 def main():
@@ -129,25 +162,7 @@ def main():
                 summary = aggregate_rows(seed_runs)
                 summary_path = os.path.join(RESULTS_DIR, f"summary_{args.run_tag}_{activation}_{init_mode}_{tag}.csv")
                 write_csv(summary_path, summary)
-                last = summary[-1]
-                final_rows.append({
-                    "activation": activation,
-                    "init": init_mode,
-                    "init_scale": scale,
-                    "n_seeds": len(args.seeds),
-                    "epochs": args.epochs,
-                    "lr": args.lr,
-                    "noise": args.noise,
-                    "test_size": args.test_size,
-                    "train_acc_mean": last["train_acc_mean"],
-                    "test_acc_mean": last["test_acc_mean"],
-                    "dphi_small_rate_mean": last["dphi_small_rate_mean"],
-                    "dphi_mean_abs_mean": last["dphi_mean_abs_mean"],
-                    "dphi_p01_abs_mean": last["dphi_p01_abs_mean"],
-                    "dphi_log_mean_mean": last["dphi_log_mean_mean"],
-                    "z_p90_abs_mean": last["z_p90_abs_mean"],
-                    "z_near0_rate_mean": last["z_near0_rate_mean"],
-                })
+                final_rows.append(final_summary_row(activation, init_mode, scale, args, summary[-1]))
 
     write_csv(os.path.join(RESULTS_DIR, f"final_{args.run_tag}.csv"), final_rows)
 
