@@ -7,18 +7,21 @@ def _stack(arrays):
     return np.concatenate([a.reshape(-1) for a in arrays])
 
 
-def limit_rate_from_z(hidden_activation, z_abs, limit_thresh=0.95):
-    if z_abs.size == 0:
+def activation_limit_rate(hidden_activation, z_flat, limit_thresh=0.95):
+    """Activation-specific limit/dead-rate proxy used as a qualitative diagnostic."""
+    if z_flat.size == 0:
         return 0.0
     if hidden_activation == "relu":
-        return float(np.mean(z_abs == 0.0))
-    if hidden_activation in {"tanh", "softsign"}:
-        bound = 1.0
-    elif hidden_activation == "arctan":
-        bound = np.pi / 2.0
-    else:
-        return 0.0
-    return float(np.mean(np.abs(z_abs) >= (limit_thresh * bound)))
+        # ReLU output is exactly zero when z <= 0.
+        return float(np.mean(z_flat <= 0.0))
+    if hidden_activation == "tanh":
+        return float(np.mean(np.abs(np.tanh(z_flat)) > limit_thresh))
+    if hidden_activation == "arctan":
+        return float(np.mean(np.abs(np.arctan(z_flat)) > limit_thresh * (np.pi / 2.0)))
+    if hidden_activation == "softsign":
+        softsign = z_flat / (1.0 + np.abs(z_flat))
+        return float(np.mean(np.abs(softsign) > limit_thresh))
+    raise ValueError(f"Unknown activation '{hidden_activation}'")
 
 
 def activation_diagnostics(hidden_activation, hidden_z, deriv_eps=1e-3, z_linear_eps=0.1):
@@ -59,7 +62,7 @@ def activation_diagnostics(hidden_activation, hidden_z, deriv_eps=1e-3, z_linear
         "z_mean_abs": float(np.mean(z_abs)),
         "z_p90_abs": float(np.percentile(z_abs, 90)),
         "z_near0_rate": float(np.mean(z_abs <= z_linear_eps)),
-        "limit_rate": float(np.mean(dphi_abs < 0.05)),
+        "limit_rate": activation_limit_rate(hidden_activation, z_flat),
     }
 
 
